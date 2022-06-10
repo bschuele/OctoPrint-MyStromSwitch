@@ -20,6 +20,7 @@ class MyStromSwitchPlugin(octoprint.plugin.SettingsPlugin,
     def __init__(self):
         self.ip = None
         self.token = ""
+        self.relayStatus = False
         self.intervall = 1
         self.onOffButtonEnabled = False
         self.powerOnOnStart = False
@@ -197,6 +198,7 @@ class MyStromSwitchPlugin(octoprint.plugin.SettingsPlugin,
                         data["automaticShutdownEnabled"] = self.shutdownAfterPrintFinished
                         data["automaticPowerOffEnabled"] = self.powerOffAfterPrintFinished
                         self._plugin_manager.send_plugin_message(self._identifier, data)
+                        self.relayStatus = data["relay"]
                         return
                 except (requests.exceptions.ConnectionError, ValueError) as e:
                     self._logger.exception(e)
@@ -208,6 +210,7 @@ class MyStromSwitchPlugin(octoprint.plugin.SettingsPlugin,
                 "showPowerOffPrintFinishOption": False, "automaticShutdownEnabled": self.shutdownAfterPrintFinished,
                 "automaticPowerOffEnabled": self.powerOffAfterPrintFinished}
         self._plugin_manager.send_plugin_message(self._identifier, data)
+        self.relayStatus = data["relay"]
 
     def _setRelaisState(self, newState):
         nbRetry = 0
@@ -322,6 +325,26 @@ class MyStromSwitchPlugin(octoprint.plugin.SettingsPlugin,
             enablePowerOffAfterFinish=[]
         )
 
+    def on_startup(self, host, port):
+        psucontrol_helpers = self._plugin_manager.get_helpers("psucontrol")
+        if not psucontrol_helpers or 'register_plugin' not in psucontrol_helpers.keys():
+            self._logger.warning("The version of PSUControl that is installed does not support plugin registration.")
+            return
+
+        self._logger.debug("Registering plugin with PSUControl")
+        psucontrol_helpers['register_plugin'](self)
+
+     def turn_psu_on(self):
+        self._logger.info("ON from PSUControl")
+        self._setRelaisState(True)
+
+    def turn_psu_off(self):
+        self._logger.info("OFF from PSUControl")
+        self._setRelaisState(False)
+
+    def get_psu_state(self):
+        return self.relayStatus
+        
     def on_after_startup(self):
         if self.powerOnOnStart:
             self._logger.info("Turn on Relais on Start")
